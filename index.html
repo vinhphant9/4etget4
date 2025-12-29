@@ -2,7 +2,7 @@
 <html lang="vi">
 <head>
 <meta charset="UTF-8">
-<title>Quay video theo QR + Thời gian + Âm thanh + Bíp</title>
+<title>Quay video theo QR + Thời gian</title>
 <style>
 body { font-family: Arial; text-align: center; background: #f2f2f2; }
 video, canvas { width: 80%; max-width: 640px; border: 2px solid #333; }
@@ -10,11 +10,10 @@ video, canvas { width: 80%; max-width: 640px; border: 2px solid #333; }
 </head>
 <body>
 
-<h2>Quay video theo QR (chèn QR + thời gian + âm thanh + bíp)</h2>
+<h2>Quay video theo QR (chèn QR + thời gian)</h2>
 
 <video id="video" autoplay muted></video>
 <canvas id="canvas"></canvas>
-<audio id="beep" src="https://actions.google.com/sounds/v1/cartoon/clang_and_wobble.ogg"></audio>
 
 <script src="https://cdn.jsdelivr.net/npm/jsqr/dist/jsQR.js"></script>
 
@@ -22,7 +21,6 @@ video, canvas { width: 80%; max-width: 640px; border: 2px solid #333; }
 const video = document.getElementById("video");
 const canvas = document.getElementById("canvas");
 const ctx = canvas.getContext("2d");
-const beep = document.getElementById("beep");
 
 let currentQR = null;
 let mediaRecorder;
@@ -30,11 +28,8 @@ let chunks = [];
 let startTime = "";
 let endTime = "";
 
-// Mở camera với chất lượng cao nhất có thể
-navigator.mediaDevices.getUserMedia({ 
-  video: { width: 1920, height: 1080, facingMode: "environment" }, 
-  audio: true 
-})
+// Mở camera
+navigator.mediaDevices.getUserMedia({ video: true, audio: true })
 .then(stream => {
   video.srcObject = stream;
   requestAnimationFrame(drawFrame);
@@ -42,7 +37,7 @@ navigator.mediaDevices.getUserMedia({
 })
 .catch(() => alert("Không mở được camera"));
 
-// Vẽ video + QR + thời gian lên canvas
+// Vẽ video + text chèn vào canvas
 function drawFrame() {
   if (video.videoWidth) {
     canvas.width = video.videoWidth;
@@ -75,16 +70,14 @@ function scanQR() {
     const qr = jsQR(img.data, img.width, img.height);
 
     if (qr && qr.data !== currentQR) {
-      beep.play(); // bíp khi quét QR
       handleNewQR(qr.data);
     }
   }
-  setTimeout(scanQR, 200);
+  setTimeout(scanQR, 300);
 }
 
-// Khi quét QR mới
+// Khi có QR mới
 function handleNewQR(qrData) {
-  // Dừng video hiện tại và lưu file
   if (mediaRecorder && mediaRecorder.state === "recording") {
     endTime = new Date().toLocaleString();
     mediaRecorder.stop();
@@ -95,8 +88,8 @@ function handleNewQR(qrData) {
   endTime = "";
 
   chunks = [];
-  const stream = canvas.captureStream(30); // 30 fps
-  mediaRecorder = new MediaRecorder(stream, { mimeType: "video/webm; codecs=vp9" });
+  const stream = canvas.captureStream(30);
+  mediaRecorder = new MediaRecorder(stream);
 
   mediaRecorder.ondataavailable = e => chunks.push(e.data);
 
