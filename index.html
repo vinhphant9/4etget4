@@ -40,7 +40,7 @@ video, canvas {
 <script>
 /* ========= MẬT KHẨU ========= */
 const USERS = {
-  "1": null,
+  "0": null,
   "2": null,
   "pass003": null,
   "pass004": null,
@@ -119,7 +119,11 @@ function startRecording(qr) {
   const audioTrack = mediaStream.getAudioTracks()[0];
   canvasStream.addTrack(audioTrack);
 
-  recorder = new MediaRecorder(canvasStream, { mimeType: "video/webm" });
+  recorder = new MediaRecorder(canvasStream, {
+  mimeType: "video/webm;codecs=vp9,opus",
+  videoBitsPerSecond: 12_000_000, // 12 Mbps (rất nét)
+  audioBitsPerSecond: 192_000
+});
   recordedChunks = [];
 
   recorder.ondataavailable = e => recordedChunks.push(e.data);
@@ -166,4 +170,5 @@ function startScan() {
 
 </body>
 </html>
+
 
