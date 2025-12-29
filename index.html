@@ -96,9 +96,18 @@ async function login() {
   beep(); // mở audio context
 
   mediaStream = await navigator.mediaDevices.getUserMedia({
-    video: { facingMode: { exact: "environment" } },
-    audio: true
-  });
+  video: {
+    facingMode: { exact: "environment" },
+    width: { ideal: 1920 },
+    height: { ideal: 1080 },
+    frameRate: { ideal: 60 }
+  },
+  audio: {
+    echoCancellation: false,
+    noiseSuppression: false,
+    sampleRate: 48000
+  }
+});
 
   video.srcObject = mediaStream;
   startScan();
@@ -157,3 +166,4 @@ function startScan() {
 
 </body>
 </html>
+
