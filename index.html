@@ -2,17 +2,28 @@
 <html lang="vi">
 <head>
 <meta charset="UTF-8">
-<title>Quay video theo QR + Thời gian</title>
+<title>Quay video theo QR</title>
+
 <style>
-body { font-family: Arial; text-align: center; background: #f2f2f2; }
-video, canvas { width: 80%; max-width: 640px; border: 2px solid #333; }
+body {
+  font-family: Arial;
+  text-align: center;
+  background: #f2f2f2;
+}
+video, canvas {
+  width: 90%;
+  max-width: 640px;
+  border: 2px solid #333;
+  margin-top: 10px;
+}
 </style>
 </head>
+
 <body>
 
-<h2>Quay video theo QR (chèn QR + thời gian)</h2>
+<h2>Quay video theo QR (Camera sau)</h2>
 
-<video id="video" autoplay muted></video>
+<video id="video" autoplay muted playsinline></video>
 <canvas id="canvas"></canvas>
 
 <script src="https://cdn.jsdelivr.net/npm/jsqr/dist/jsQR.js"></script>
@@ -23,33 +34,36 @@ const canvas = document.getElementById("canvas");
 const ctx = canvas.getContext("2d");
 
 let currentQR = null;
-let mediaRecorder;
+let mediaRecorder = null;
 let chunks = [];
 let startTime = "";
 let endTime = "";
 
-// Mở camera
-navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+/* ===== MỞ CAMERA SAU ===== */
+navigator.mediaDevices.getUserMedia({
+  video: { facingMode: "environment" },
+  audio: true
+})
 .then(stream => {
   video.srcObject = stream;
   requestAnimationFrame(drawFrame);
   scanQR();
 })
-.catch(() => alert("Không mở được camera"));
+.catch(() => alert("Không mở được camera sau"));
 
-// Vẽ video + text chèn vào canvas
+/* ===== VẼ VIDEO + CHỮ ===== */
 function drawFrame() {
-  if (video.videoWidth) {
+  if (video.videoWidth > 0) {
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
 
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
     ctx.fillStyle = "rgba(0,0,0,0.6)";
-    ctx.fillRect(10, 10, 380, 90);
+    ctx.fillRect(10, 10, 420, 100);
 
     ctx.fillStyle = "#00ff00";
-    ctx.font = "20px Arial";
+    ctx.font = "18px Arial";
     ctx.fillText("QR: " + (currentQR || "Chưa có"), 20, 40);
     ctx.fillText("Bắt đầu: " + startTime, 20, 65);
     ctx.fillText("Kết thúc: " + endTime, 20, 90);
@@ -57,17 +71,26 @@ function drawFrame() {
   requestAnimationFrame(drawFrame);
 }
 
-// Quét QR
+/* ===== QUÉT QR ===== */
 function scanQR() {
   if (video.readyState === video.HAVE_ENOUGH_DATA) {
-    const temp = document.createElement("canvas");
-    temp.width = video.videoWidth;
-    temp.height = video.videoHeight;
-    const tctx = temp.getContext("2d");
+    const tempCanvas = document.createElement("canvas");
+    tempCanvas.width = video.videoWidth;
+    tempCanvas.height = video.videoHeight;
+    const tctx = tempCanvas.getContext("2d");
     tctx.drawImage(video, 0, 0);
 
-    const img = tctx.getImageData(0, 0, temp.width, temp.height);
-    const qr = jsQR(img.data, img.width, img.height);
+    const imageData = tctx.getImageData(
+      0, 0,
+      tempCanvas.width,
+      tempCanvas.height
+    );
+
+    const qr = jsQR(
+      imageData.data,
+      imageData.width,
+      imageData.height
+    );
 
     if (qr && qr.data !== currentQR) {
       handleNewQR(qr.data);
@@ -76,28 +99,35 @@ function scanQR() {
   setTimeout(scanQR, 300);
 }
 
-// Khi có QR mới
+/* ===== XỬ LÝ QR MỚI ===== */
 function handleNewQR(qrData) {
+
+  // Dừng video cũ
   if (mediaRecorder && mediaRecorder.state === "recording") {
     endTime = new Date().toLocaleString();
     mediaRecorder.stop();
   }
 
+  // Gán QR mới
   currentQR = qrData;
   startTime = new Date().toLocaleString();
   endTime = "";
-
   chunks = [];
+
   const stream = canvas.captureStream(30);
-  mediaRecorder = new MediaRecorder(stream);
+  mediaRecorder = new MediaRecorder(stream, {
+    mimeType: "video/webm"
+  });
 
   mediaRecorder.ondataavailable = e => chunks.push(e.data);
 
   mediaRecorder.onstop = () => {
     const blob = new Blob(chunks, { type: "video/webm" });
+    const url = URL.createObjectURL(blob);
+
     const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = `QR_${currentQR}_${Date.now()}.webm`;
+    a.href = url;
+    a.download = "QR_" + currentQR + "_" + Date.now() + ".webm";
     a.click();
   };
 
