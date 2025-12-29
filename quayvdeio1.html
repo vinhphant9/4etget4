@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<title>Quay video theo QR + Thời gian</title>
+<style>
+body { font-family: Arial; text-align: center; background: #f2f2f2; }
+video, canvas { width: 80%; max-width: 640px; border: 2px solid #333; }
+</style>
+</head>
+<body>
+
+<h2>Quay video theo QR (chèn QR + thời gian)</h2>
+
+<video id="video" autoplay muted></video>
+<canvas id="canvas"></canvas>
+
+<script src="https://cdn.jsdelivr.net/npm/jsqr/dist/jsQR.js"></script>
+
+<script>
+const video = document.getElementById("video");
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d");
+
+let currentQR = null;
+let mediaRecorder;
+let chunks = [];
+let startTime = "";
+let endTime = "";
+
+// Mở camera
+navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+.then(stream => {
+  video.srcObject = stream;
+  requestAnimationFrame(drawFrame);
+  scanQR();
+})
+.catch(() => alert("Không mở được camera"));
+
+// Vẽ video + text chèn vào canvas
+function drawFrame() {
+  if (video.videoWidth) {
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+    ctx.fillStyle = "rgba(0,0,0,0.6)";
+    ctx.fillRect(10, 10, 380, 90);
+
+    ctx.fillStyle = "#00ff00";
+    ctx.font = "20px Arial";
+    ctx.fillText("QR: " + (currentQR || "Chưa có"), 20, 40);
+    ctx.fillText("Bắt đầu: " + startTime, 20, 65);
+    ctx.fillText("Kết thúc: " + endTime, 20, 90);
+  }
+  requestAnimationFrame(drawFrame);
+}
+
+// Quét QR
+function scanQR() {
+  if (video.readyState === video.HAVE_ENOUGH_DATA) {
+    const temp = document.createElement("canvas");
+    temp.width = video.videoWidth;
+    temp.height = video.videoHeight;
+    const tctx = temp.getContext("2d");
+    tctx.drawImage(video, 0, 0);
+
+    const img = tctx.getImageData(0, 0, temp.width, temp.height);
+    const qr = jsQR(img.data, img.width, img.height);
+
+    if (qr && qr.data !== currentQR) {
+      handleNewQR(qr.data);
+    }
+  }
+  setTimeout(scanQR, 300);
+}
+
+// Khi có QR mới
+function handleNewQR(qrData) {
+  if (mediaRecorder && mediaRecorder.state === "recording") {
+    endTime = new Date().toLocaleString();
+    mediaRecorder.stop();
+  }
+
+  currentQR = qrData;
+  startTime = new Date().toLocaleString();
+  endTime = "";
+
+  chunks = [];
+  const stream = canvas.captureStream(30);
+  mediaRecorder = new MediaRecorder(stream);
+
+  mediaRecorder.ondataavailable = e => chunks.push(e.data);
+
+  mediaRecorder.onstop = () => {
+    const blob = new Blob(chunks, { type: "video/webm" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `QR_${currentQR}_${Date.now()}.webm`;
+    a.click();
+  };
+
+  mediaRecorder.start();
+}
+</script>
+
+</body>
+</html>
