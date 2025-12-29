@@ -2,7 +2,7 @@
 <html lang="vi">
 <head>
 <meta charset="UTF-8">
-<title>Quay video theo QR</title>
+<title>Quay video theo QR + Bíp</title>
 
 <style>
 body {
@@ -21,7 +21,7 @@ video, canvas {
 
 <body>
 
-<h2>Quay video theo QR (Camera sau)</h2>
+<h2>Quay video theo QR (Camera sau + Có tiếng + Bíp)</h2>
 
 <video id="video" autoplay muted playsinline></video>
 <canvas id="canvas"></canvas>
@@ -39,7 +39,24 @@ let chunks = [];
 let startTime = "";
 let endTime = "";
 
-/* ===== MỞ CAMERA SAU ===== */
+/* ===== TIẾNG BÍP ===== */
+function playBeep() {
+  const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  const oscillator = audioCtx.createOscillator();
+  const gainNode = audioCtx.createGain();
+
+  oscillator.type = "sine";
+  oscillator.frequency.setValueAtTime(1000, audioCtx.currentTime); // cao độ
+  gainNode.gain.setValueAtTime(0.2, audioCtx.currentTime); // âm lượng
+
+  oscillator.connect(gainNode);
+  gainNode.connect(audioCtx.destination);
+
+  oscillator.start();
+  oscillator.stop(audioCtx.currentTime + 0.15); // 0.15 giây
+}
+
+/* ===== MỞ CAMERA SAU + MIC ===== */
 navigator.mediaDevices.getUserMedia({
   video: { facingMode: "environment" },
   audio: true
@@ -49,7 +66,7 @@ navigator.mediaDevices.getUserMedia({
   requestAnimationFrame(drawFrame);
   scanQR();
 })
-.catch(() => alert("Không mở được camera sau"));
+.catch(() => alert("Không mở được camera hoặc microphone"));
 
 /* ===== VẼ VIDEO + CHỮ ===== */
 function drawFrame() {
@@ -60,7 +77,7 @@ function drawFrame() {
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
     ctx.fillStyle = "rgba(0,0,0,0.6)";
-    ctx.fillRect(10, 10, 420, 100);
+    ctx.fillRect(10, 10, 430, 100);
 
     ctx.fillStyle = "#00ff00";
     ctx.font = "18px Arial";
@@ -102,20 +119,29 @@ function scanQR() {
 /* ===== XỬ LÝ QR MỚI ===== */
 function handleNewQR(qrData) {
 
+  playBeep(); // 🔊 phát tiếng bíp
+
   // Dừng video cũ
   if (mediaRecorder && mediaRecorder.state === "recording") {
     endTime = new Date().toLocaleString();
     mediaRecorder.stop();
   }
 
-  // Gán QR mới
   currentQR = qrData;
   startTime = new Date().toLocaleString();
   endTime = "";
   chunks = [];
 
-  const stream = canvas.captureStream(30);
-  mediaRecorder = new MediaRecorder(stream, {
+  // Gộp video canvas + audio mic
+  const videoStream = canvas.captureStream(30);
+  const audioStream = video.srcObject;
+
+  const mixedStream = new MediaStream([
+    ...videoStream.getVideoTracks(),
+    ...audioStream.getAudioTracks()
+  ]);
+
+  mediaRecorder = new MediaRecorder(mixedStream, {
     mimeType: "video/webm"
   });
 
