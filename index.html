@@ -2,190 +2,162 @@
 <html lang="vi">
 <head>
 <meta charset="UTF-8">
-<title>Quay video theo QR</title>
+<title>QR Camera Secure</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
 body {
-  font-family: Arial;
-  background: #f2f2f2;
+  font-family: Arial, sans-serif;
+  background: #111;
+  color: #fff;
   text-align: center;
-  margin: 0;
   padding: 10px;
-}
-video, canvas {
-  width: 100%;
-  max-width: 640px;
-  border: 2px solid #333;
-}
-#loginBox {
-  margin-top: 50px;
 }
 input, button {
   padding: 10px;
   font-size: 16px;
+  margin: 5px;
+}
+video {
+  width: 100%;
+  max-width: 420px;
+  margin-top: 10px;
+  border: 2px solid #0f0;
+}
+#log {
+  margin-top: 10px;
+  font-size: 14px;
+  word-break: break-word;
 }
 </style>
 </head>
 
 <body>
 
-<!-- ====== LOGIN ====== -->
-<div id="loginBox">
-  <h2>🔐 Nhập mật khẩu sử dụng</h2>
-  <input type="password" id="password" placeholder="Nhập mật khẩu">
-  <br><br>
-  <button onclick="login()">Xác nhận</button>
-  <p id="msg" style="color:red"></p>
+<h3>🔐 Nhập mật khẩu</h3>
+<input id="passwordInput" placeholder="Nhập mật khẩu">
+<button onclick="login()">Xác nhận</button>
+
+<div id="cameraBox" style="display:none;">
+  <video id="video" autoplay playsinline muted></video>
+  <p id="log">Chưa quét QR</p>
 </div>
 
-<!-- ====== APP ====== -->
-<div id="app" style="display:none">
-  <h3>📷 Quay video theo QR</h3>
-  <video id="video" autoplay muted playsinline></video>
-  <canvas id="canvas"></canvas>
-</div>
-
-<script src="https://cdn.jsdelivr.net/npm/jsqr/dist/jsQR.js"></script>
+<script src="https://unpkg.com/jsqr/dist/jsQR.js"></script>
 
 <script>
-/* =================================================
-   🔑 DANH SÁCH MẬT KHẨU (BẠN TỰ ĐỔI Ở ĐÂY)
-   ================================================= */
-const PASSWORDS = [
-  "1",   // ← đổi
-  "2",   // ← đổi
-  "3",   // ← đổi
-  "password04",   // ← đổi
-  "password05"    // ← đổi
-];
+/* =============================
+   1️⃣ MẬT KHẨU (TỰ ĐỔI)
+============================= */
+const USERS = {
+  "pass001": null,
+  "pass002": null,
+  "pass003": null,
+  "pass004": null,
+  "pass005": null
+};
 
-/* =================================================
-   🔐 KHÓA MẬT KHẨU THEO THIẾT BỊ
-   ================================================= */
+/* =============================
+   2️⃣ KHÓA THIẾT BỊ
+============================= */
 function getDeviceId() {
   let id = localStorage.getItem("device_id");
   if (!id) {
-    id = "dev-" + Math.random().toString(36).substr(2, 9);
+    id = crypto.randomUUID();
     localStorage.setItem("device_id", id);
   }
   return id;
 }
 
-function login() {
-  const pass = document.getElementById("password").value;
-  const msg = document.getElementById("msg");
+/* =============================
+   3️⃣ ÂM THANH BÍP (CHẮC CHẮN KÊU)
+============================= */
+let audioCtx;
+function beep() {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
 
-  if (!PASSWORDS.includes(pass)) {
-    msg.innerText = "❌ Mật khẩu không đúng";
-    return;
-  }
+  osc.type = "square";
+  osc.frequency.value = 1000;
+  gain.gain.value = 0.2;
 
-  const lockKey = "lock_" + pass;
-  const currentDevice = getDeviceId();
-  const savedDevice = localStorage.getItem(lockKey);
+  osc.connect(gain);
+  gain.connect(audioCtx.destination);
 
-  if (!savedDevice) {
-    localStorage.setItem(lockKey, currentDevice);
-  } else if (savedDevice !== currentDevice) {
-    msg.innerText = "⚠️ Mật khẩu này đã dùng trên thiết bị khác";
-    return;
-  }
-
-  document.getElementById("loginBox").style.display = "none";
-  document.getElementById("app").style.display = "block";
-  startCamera();
+  osc.start();
+  setTimeout(() => osc.stop(), 150);
 }
 
-/* =================================================
-   📷 CAMERA + QR + VIDEO
-   ================================================= */
-const video = document.getElementById("video");
-const canvas = document.getElementById("canvas");
-const ctx = canvas.getContext("2d");
+/* =============================
+   4️⃣ ĐĂNG NHẬP + KHÓA
+============================= */
+async function login() {
+  const pass = passwordInput.value.trim();
+  const deviceId = getDeviceId();
 
-let currentQR = null;
-let recorder;
-let chunks = [];
-let startTime = "";
-let endTime = "";
+  if (!(pass in USERS)) {
+    alert("❌ Sai mật khẩu");
+    return;
+  }
 
-// tiếng bíp khi quét QR
-const beep = new Audio("https://actions.google.com/sounds/v1/cartoon/wood_plank_flicks.ogg");
+  const key = "lock_" + pass;
+  const locked = localStorage.getItem(key);
 
-function startCamera() {
-  navigator.mediaDevices.getUserMedia({
+  if (!locked) {
+    localStorage.setItem(key, deviceId);
+  } else if (locked !== deviceId) {
+    alert("⛔ Mật khẩu đã dùng trên thiết bị khác");
+    return;
+  }
+
+  cameraBox.style.display = "block";
+
+  // BẮT BUỘC mở AudioContext bằng user click
+  beep();
+
+  await startCamera();
+}
+
+/* =============================
+   5️⃣ CAMERA SAU + ÂM THANH
+============================= */
+async function startCamera() {
+  const stream = await navigator.mediaDevices.getUserMedia({
     video: { facingMode: { exact: "environment" } },
     audio: true
-  }).then(stream => {
-    video.srcObject = stream;
-    requestAnimationFrame(drawFrame);
-    scanQR();
-  }).catch(() => alert("❌ Không mở được camera"));
+  });
+
+  video.muted = false; // MỞ ÂM THANH
+  video.srcObject = stream;
+
+  scanQR();
 }
 
-function drawFrame() {
-  if (video.videoWidth) {
+/* =============================
+   6️⃣ QUÉT QR + BÍP
+============================= */
+function scanQR() {
+  const canvas = document.createElement("canvas");
+  const ctx = canvas.getContext("2d");
+  let lastQR = "";
+
+  setInterval(() => {
+    if (video.readyState !== video.HAVE_ENOUGH_DATA) return;
+
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
-
     ctx.drawImage(video, 0, 0);
 
-    ctx.fillStyle = "rgba(0,0,0,0.6)";
-    ctx.fillRect(10, 10, 420, 90);
+    const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const qr = jsQR(img.data, canvas.width, canvas.height);
 
-    ctx.fillStyle = "#00ff00";
-    ctx.font = "18px Arial";
-    ctx.fillText("QR: " + (currentQR || "Chưa có"), 20, 35);
-    ctx.fillText("Bắt đầu: " + startTime, 20, 60);
-    ctx.fillText("Kết thúc: " + endTime, 20, 85);
-  }
-  requestAnimationFrame(drawFrame);
-}
-
-function scanQR() {
-  if (video.readyState === video.HAVE_ENOUGH_DATA) {
-    const temp = document.createElement("canvas");
-    temp.width = video.videoWidth;
-    temp.height = video.videoHeight;
-    const tctx = temp.getContext("2d");
-    tctx.drawImage(video, 0, 0);
-
-    const img = tctx.getImageData(0, 0, temp.width, temp.height);
-    const qr = jsQR(img.data, img.width, img.height);
-
-    if (qr && qr.data !== currentQR) {
-      beep.play();
-      handleNewQR(qr.data);
+    if (qr && qr.data !== lastQR) {
+      lastQR = qr.data;
+      document.getElementById("log").innerText = "📦 QR: " + qr.data;
+      beep();
     }
-  }
-  setTimeout(scanQR, 300);
-}
-
-function handleNewQR(qrData) {
-  if (recorder && recorder.state === "recording") {
-    endTime = new Date().toLocaleString();
-    recorder.stop();
-  }
-
-  currentQR = qrData;
-  startTime = new Date().toLocaleString();
-  endTime = "";
-
-  chunks = [];
-  const stream = canvas.captureStream(30);
-  recorder = new MediaRecorder(stream);
-
-  recorder.ondataavailable = e => chunks.push(e.data);
-  recorder.onstop = () => {
-    const blob = new Blob(chunks, { type: "video/webm" });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = `QR_${currentQR}_${Date.now()}.webm`;
-    a.click();
-  };
-
-  recorder.start();
+  }, 400);
 }
 </script>
 
