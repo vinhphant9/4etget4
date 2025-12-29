@@ -2,180 +2,115 @@
 <html lang="vi">
 <head>
 <meta charset="UTF-8">
-<title>QR Auto Record</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-
+<title>Quay video theo QR + Thời gian + Âm thanh + Bíp</title>
 <style>
-body {
-  font-family: Arial;
-  background: #111;
-  color: #fff;
-  text-align: center;
-}
-input, button {
-  padding: 10px;
-  font-size: 16px;
-  margin: 5px;
-}
-video, canvas {
-  width: 100%;
-  max-width: 420px;
-  border: 2px solid #0f0;
-}
+body { font-family: Arial; text-align: center; background: #f2f2f2; }
+video, canvas { width: 80%; max-width: 640px; border: 2px solid #333; }
 </style>
 </head>
-
 <body>
 
-<h3>🔐 Nhập mật khẩu</h3>
-<input id="passwordInput" placeholder="Nhập mật khẩu">
-<button onclick="login()">Xác nhận</button>
+<h2>Quay video theo QR (chèn QR + thời gian + âm thanh + bíp)</h2>
 
-<video id="video" autoplay playsinline muted></video>
-<canvas id="canvas" style="display:none"></canvas>
-<p id="status">Chưa quét QR</p>
+<video id="video" autoplay muted></video>
+<canvas id="canvas"></canvas>
+<audio id="beep" src="https://actions.google.com/sounds/v1/cartoon/clang_and_wobble.ogg"></audio>
 
-<script src="https://unpkg.com/jsqr/dist/jsQR.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jsqr/dist/jsQR.js"></script>
 
 <script>
-/* ========= MẬT KHẨU ========= */
-const USERS = {
-  "0": null,
-  "2": null,
-  "pass003": null,
-  "pass004": null,
-  "pass005": null
-};
+const video = document.getElementById("video");
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d");
+const beep = document.getElementById("beep");
 
-function getDeviceId() {
-  let id = localStorage.getItem("device_id");
-  if (!id) {
-    id = crypto.randomUUID();
-    localStorage.setItem("device_id", id);
+let currentQR = null;
+let mediaRecorder;
+let chunks = [];
+let startTime = "";
+let endTime = "";
+
+// Mở camera với chất lượng cao nhất có thể
+navigator.mediaDevices.getUserMedia({ 
+  video: { width: 1920, height: 1080, facingMode: "environment" }, 
+  audio: true 
+})
+.then(stream => {
+  video.srcObject = stream;
+  requestAnimationFrame(drawFrame);
+  scanQR();
+})
+.catch(() => alert("Không mở được camera"));
+
+// Vẽ video + QR + thời gian lên canvas
+function drawFrame() {
+  if (video.videoWidth) {
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+    ctx.fillStyle = "rgba(0,0,0,0.6)";
+    ctx.fillRect(10, 10, 380, 90);
+
+    ctx.fillStyle = "#00ff00";
+    ctx.font = "20px Arial";
+    ctx.fillText("QR: " + (currentQR || "Chưa có"), 20, 40);
+    ctx.fillText("Bắt đầu: " + startTime, 20, 65);
+    ctx.fillText("Kết thúc: " + endTime, 20, 90);
   }
-  return id;
+  requestAnimationFrame(drawFrame);
 }
 
-/* ========= ÂM THANH BÍP ========= */
-let audioCtx;
-function beep() {
-  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-  const o = audioCtx.createOscillator();
-  const g = audioCtx.createGain();
-  o.frequency.value = 1000;
-  g.gain.value = 0.25;
-  o.connect(g);
-  g.connect(audioCtx.destination);
-  o.start();
-  setTimeout(() => o.stop(), 120);
+// Quét QR
+function scanQR() {
+  if (video.readyState === video.HAVE_ENOUGH_DATA) {
+    const temp = document.createElement("canvas");
+    temp.width = video.videoWidth;
+    temp.height = video.videoHeight;
+    const tctx = temp.getContext("2d");
+    tctx.drawImage(video, 0, 0);
+
+    const img = tctx.getImageData(0, 0, temp.width, temp.height);
+    const qr = jsQR(img.data, img.width, img.height);
+
+    if (qr && qr.data !== currentQR) {
+      beep.play(); // bíp khi quét QR
+      handleNewQR(qr.data);
+    }
+  }
+  setTimeout(scanQR, 200);
 }
 
-/* ========= CAMERA ========= */
-let mediaStream;
-let recorder;
-let recordedChunks = [];
-let currentQR = "";
-
-async function login() {
-  const pass = passwordInput.value.trim();
-  if (!(pass in USERS)) {
-    alert("Sai mật khẩu");
-    return;
+// Khi quét QR mới
+function handleNewQR(qrData) {
+  // Dừng video hiện tại và lưu file
+  if (mediaRecorder && mediaRecorder.state === "recording") {
+    endTime = new Date().toLocaleString();
+    mediaRecorder.stop();
   }
 
-  const deviceId = getDeviceId();
-  const key = "lock_" + pass;
-  const locked = localStorage.getItem(key);
+  currentQR = qrData;
+  startTime = new Date().toLocaleString();
+  endTime = "";
 
-  if (!locked) localStorage.setItem(key, deviceId);
-  else if (locked !== deviceId) {
-    alert("Mật khẩu đã bị khóa trên máy khác");
-    return;
-  }
+  chunks = [];
+  const stream = canvas.captureStream(30); // 30 fps
+  mediaRecorder = new MediaRecorder(stream, { mimeType: "video/webm; codecs=vp9" });
 
-  beep(); // mở audio context
+  mediaRecorder.ondataavailable = e => chunks.push(e.data);
 
-  mediaStream = await navigator.mediaDevices.getUserMedia({
-  video: {
-    facingMode: { exact: "environment" },
-    width: { ideal: 1920 },
-    height: { ideal: 1080 },
-    frameRate: { ideal: 60 }
-  },
-  audio: {
-    echoCancellation: false,
-    noiseSuppression: false,
-    sampleRate: 48000
-  }
-});
-
-  video.srcObject = mediaStream;
-  startScan();
-}
-
-/* ========= QUAY VIDEO ========= */
-function startRecording(qr) {
-  const canvasStream = canvas.captureStream(30);
-  const audioTrack = mediaStream.getAudioTracks()[0];
-  canvasStream.addTrack(audioTrack);
-
- recorder = new MediaRecorder(canvasStream, {
-  mimeType: "video/webm;codecs=vp9,opus",
-  videoBitsPerSecond: 20_000_000, // 20 Mbps
-  audioBitsPerSecond: 256_000
-});
-
-  recordedChunks = [];
-
-  recorder.ondataavailable = e => recordedChunks.push(e.data);
-
-  recorder.onstop = () => {
-    const blob = new Blob(recordedChunks, { type: "video/webm" });
+  mediaRecorder.onstop = () => {
+    const blob = new Blob(chunks, { type: "video/webm" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = `QR_${qr}_${Date.now()}.webm`;
+    a.download = `QR_${currentQR}_${Date.now()}.webm`;
     a.click();
   };
 
-  recorder.start();
-}
-
-/* ========= QUÉT QR ========= */
-function startScan() {
-  const ctx = canvas.getContext("2d");
-
-  setInterval(() => {
-    if (video.readyState !== video.HAVE_ENOUGH_DATA) return;
-
-    const W = 1920;
-const H = 1080;
-
-canvas.width = W;
-canvas.height = H;
-
-ctx.drawImage(video, 0, 0, W, H);
-
-
-    const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    const qr = jsQR(img.data, canvas.width, canvas.height);
-
-    if (qr && qr.data !== currentQR) {
-      beep();
-      document.getElementById("status").innerText = "📦 QR: " + qr.data;
-
-      if (recorder && recorder.state === "recording") {
-        recorder.stop(); // 👉 TỰ LƯU FILE QR CŨ
-      }
-
-      currentQR = qr.data;
-      startRecording(currentQR);
-    }
-  }, 400);
+  mediaRecorder.start();
 }
 </script>
 
 </body>
 </html>
-
-
-
