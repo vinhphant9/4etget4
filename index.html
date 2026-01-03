@@ -2,136 +2,80 @@
 <html lang="vi">
 <head>
 <meta charset="UTF-8">
-<title>Quay video theo QR</title>
-
+<title>Tính lợi nhuận</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <style>
-body {
-  font-family: Arial;
-  text-align: center;
-  background: #f2f2f2;
-}
-video, canvas {
-  width: 90%;
-  max-width: 640px;
-  border: 2px solid #333;
-  margin-top: 10px;
-}
+    body {
+        font-family: Arial, sans-serif;
+        background: #f4f6f8;
+        padding: 20px;
+    }
+    .box {
+        max-width: 400px;
+        margin: auto;
+        background: #fff;
+        padding: 20px;
+        border-radius: 10px;
+        box-shadow: 0 0 10px rgba(0,0,0,0.1);
+    }
+    h2 {
+        text-align: center;
+    }
+    input {
+        width: 100%;
+        padding: 10px;
+        margin-top: 10px;
+        font-size: 16px;
+    }
+    button {
+        width: 100%;
+        padding: 12px;
+        margin-top: 15px;
+        background: #2ecc71;
+        border: none;
+        color: #fff;
+        font-size: 16px;
+        border-radius: 5px;
+    }
+    .result {
+        margin-top: 15px;
+        font-size: 16px;
+    }
 </style>
 </head>
-
 <body>
 
-<h2>Quay video theo QR (Camera sau)</h2>
+<div class="box">
+    <h2>TÍNH LỢI NHUẬN</h2>
 
-<video id="video" autoplay muted playsinline></video>
-<canvas id="canvas"></canvas>
+    <label>Giá nhập (đ)</label>
+    <input type="number" id="giaNhap" placeholder="Ví dụ: 10000">
 
-<script src="https://cdn.jsdelivr.net/npm/jsqr/dist/jsQR.js"></script>
+    <label>Giá bán (đ)</label>
+    <input type="number" id="giaBan" placeholder="Ví dụ: 40000">
+
+    <button onclick="tinhLoiNhuan()">Tính</button>
+
+    <div class="result" id="ketQua"></div>
+</div>
 
 <script>
-const video = document.getElementById("video");
-const canvas = document.getElementById("canvas");
-const ctx = canvas.getContext("2d");
+function tinhLoiNhuan() {
+    let giaNhap = Number(document.getElementById("giaNhap").value);
+    let giaBan = Number(document.getElementById("giaBan").value);
 
-let currentQR = null;
-let mediaRecorder = null;
-let chunks = [];
-let startTime = "";
-let endTime = "";
-
-/* ===== MỞ CAMERA SAU ===== */
-navigator.mediaDevices.getUserMedia({
-  video: { facingMode: "environment" },
-  audio: true
-})
-.then(stream => {
-  video.srcObject = stream;
-  requestAnimationFrame(drawFrame);
-  scanQR();
-})
-.catch(() => alert("Không mở được camera sau"));
-
-/* ===== VẼ VIDEO + CHỮ ===== */
-function drawFrame() {
-  if (video.videoWidth > 0) {
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-    ctx.fillStyle = "rgba(0,0,0,0.6)";
-    ctx.fillRect(10, 10, 420, 100);
-
-    ctx.fillStyle = "#00ff00";
-    ctx.font = "18px Arial";
-    ctx.fillText("QR: " + (currentQR || "Chưa có"), 20, 40);
-    ctx.fillText("Bắt đầu: " + startTime, 20, 65);
-    ctx.fillText("Kết thúc: " + endTime, 20, 90);
-  }
-  requestAnimationFrame(drawFrame);
-}
-
-/* ===== QUÉT QR ===== */
-function scanQR() {
-  if (video.readyState === video.HAVE_ENOUGH_DATA) {
-    const tempCanvas = document.createElement("canvas");
-    tempCanvas.width = video.videoWidth;
-    tempCanvas.height = video.videoHeight;
-    const tctx = tempCanvas.getContext("2d");
-    tctx.drawImage(video, 0, 0);
-
-    const imageData = tctx.getImageData(
-      0, 0,
-      tempCanvas.width,
-      tempCanvas.height
-    );
-
-    const qr = jsQR(
-      imageData.data,
-      imageData.width,
-      imageData.height
-    );
-
-    if (qr && qr.data !== currentQR) {
-      handleNewQR(qr.data);
+    if (giaNhap <= 0 || giaBan <= 0) {
+        document.getElementById("ketQua").innerHTML = "⚠️ Nhập số hợp lệ";
+        return;
     }
-  }
-  setTimeout(scanQR, 300);
-}
 
-/* ===== XỬ LÝ QR MỚI ===== */
-function handleNewQR(qrData) {
+    let loiNhuan = giaBan - giaNhap;
+    let phanTram = (loiNhuan / giaNhap) * 100;
 
-  // Dừng video cũ
-  if (mediaRecorder && mediaRecorder.state === "recording") {
-    endTime = new Date().toLocaleString();
-    mediaRecorder.stop();
-  }
-
-  // Gán QR mới
-  currentQR = qrData;
-  startTime = new Date().toLocaleString();
-  endTime = "";
-  chunks = [];
-
-  const stream = canvas.captureStream(30);
-  mediaRecorder = new MediaRecorder(stream, {
-    mimeType: "video/webm"
-  });
-
-  mediaRecorder.ondataavailable = e => chunks.push(e.data);
-
-  mediaRecorder.onstop = () => {
-    const blob = new Blob(chunks, { type: "video/webm" });
-    const url = URL.createObjectURL(blob);
-
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "QR_" + currentQR + "_" + Date.now() + ".webm";
-    a.click();
-  };
-
-  mediaRecorder.start();
+    document.getElementById("ketQua").innerHTML = `
+        <b>Lợi nhuận:</b> ${loiNhuan.toLocaleString()} đ<br>
+        <b>Tỷ suất lãi:</b> ${phanTram.toFixed(2)} %
+    `;
 }
 </script>
 
