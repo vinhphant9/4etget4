@@ -1,92 +1,145 @@
 <!DOCTYPE html>
 <html lang="vi">
 <head>
-<meta charset="UTF-8">
-<title>Tính lợi nhuận TikTok Shop</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<style>
-body {
-    font-family: Arial;
-    background: #f4f6f8;
-    padding: 20px;
-}
-.box {
-    max-width: 420px;
-    margin: auto;
-    background: #fff;
-    padding: 20px;
-    border-radius: 12px;
-}
-input {
-    width: 100%;
-    padding: 10px;
-    margin: 8px 0;
-    font-size: 16px;
-}
-button {
-    width: 100%;
-    padding: 12px;
-    background: #27ae60;
-    color: #fff;
-    border: none;
-    font-size: 16px;
-    border-radius: 6px;
-}
-.result {
-    margin-top: 15px;
-    line-height: 1.6;
-}
-</style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QR Video Recorder</title>
+    <style>
+        body { margin: 0; padding: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; background-color: #000; }
+        #video { width: 100%; height: auto; }
+        #canvas { display: none; }
+        #status { color: white; font-size: 18px; margin-top: 10px; }
+    </style>
+    <!-- Include jsQR library locally for offline use. Download from https://github.com/cozmo/jsQR and save as jsQR.js in the same folder -->
+    <script src="jsQR.js"></script>
 </head>
-
 <body>
-<div class="box">
-    <h3>📦 TÍNH LỢI NHUẬN TIKTOK SHOP</h3>
+    <video id="video" autoplay playsinline></video>
+    <canvas id="canvas"></canvas>
+    <div id="status">Đang chờ quét QR...</div>
 
-    <label>Giá nhập (đ)</label>
-    <input type="number" id="giaNhap" placeholder="Ví dụ: 10000">
+    <script>
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const status = document.getElementById('status');
 
-    <label>Khách thanh toán (đ)</label>
-    <input type="number" id="giaBan" placeholder="Ví dụ: 57080">
+        let stream;
+        let mediaRecorder;
+        let recordedChunks = [];
+        let isRecording = false;
+        let lastQRCode = null;
+        let currentQRCode = null;
+        let beepAudio;
 
-    <button onclick="tinh()">Tính toán</button>
+        // Tạo âm thanh beep
+        function createBeep() {
+            const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            const oscillator = audioCtx.createOscillator();
+            const gainNode = audioCtx.createGain();
+            oscillator.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+            oscillator.type = 'square';
+            oscillator.frequency.value = 1000;
+            gainNode.gain.value = 0.5;
+            oscillator.start();
+            setTimeout(() => {
+                oscillator.stop();
+            }, 200);
+        }
 
-    <div class="result" id="kq"></div>
-</div>
+        // Khởi động camera sau
+        async function startCamera() {
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: 'environment' }, // Camera sau
+                    audio: true // Để ghi âm nếu cần, nhưng có thể bỏ nếu chỉ video
+                });
+                video.srcObject = stream;
+                video.play();
+                requestAnimationFrame(scanQR);
+            } catch (err) {
+                status.textContent = 'Lỗi truy cập camera: ' + err.message;
+            }
+        }
 
-<script>
-function tinh() {
-    let giaNhap = Number(giaNhap.value);
-    let giaBan = Number(giaBan.value);
+        // Quét QR từ video
+        function scanQR() {
+            if (video.readyState === video.HAVE_ENOUGH_DATA) {
+                canvas.height = video.videoHeight;
+                canvas.width = video.videoWidth;
+                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                const code = jsQR(imageData.data, imageData.width, imageData.height);
 
-    if (giaNhap <= 0 || giaBan <= 0) {
-        kq.innerHTML = "⚠️ Nhập số hợp lệ";
-        return;
-    }
+                if (code) {
+                    currentQRCode = code.data;
+                    if (!isRecording && currentQRCode !== lastQRCode) {
+                        // Bắt đầu ghi
+                        createBeep();
+                        startRecording();
+                        lastQRCode = currentQRCode;
+                        status.textContent = 'Đang ghi video với mã: ' + currentQRCode;
+                    } else if (isRecording && currentQRCode !== lastQRCode) {
+                        // Dừng và lưu
+                        stopRecording();
+                        lastQRCode = currentQRCode;
+                        status.textContent = 'Video đã lưu. Quét QR tiếp theo để bắt đầu.';
+                    }
+                }
 
-    // % phí trích từ ảnh
-    let phiGiaoDich = giaBan * 0.04;
-    let phiHoaHong = giaBan * 0.0884;
-    let hoaHongLienKet = giaBan * 0.0588;
-    let thue = giaBan * 0.011;
+                // Vẽ overlay nếu đang ghi
+                if (isRecording) {
+                    const now = new Date();
+                    const dateTime = now.toLocaleString('vi-VN');
+                    ctx.font = '20px Arial';
+                    ctx.fillStyle = 'white';
+                    ctx.fillText(dateTime + ' - Mã: ' + (lastQRCode || ''), 10, canvas.height - 10);
+                    // Để overlay lên video, nhưng vì video là stream, chúng ta cần composite nếu muốn ghi overlay vào video
+                    // Ở đây, overlay chỉ hiển thị trên canvas tạm thời, để ghi vào video cần xử lý trong MediaRecorder
+                }
+            }
+            requestAnimationFrame(scanQR);
+        }
 
-    let phiCoDinh = 3000 + 1620;
+        // Bắt đầu ghi video
+        function startRecording() {
+            recordedChunks = [];
+            mediaRecorder = new MediaRecorder(stream);
+            mediaRecorder.ondataavailable = (event) => {
+                if (event.data.size > 0) {
+                    recordedChunks.push(event.data);
+                }
+            };
+            mediaRecorder.onstop = saveVideo;
+            mediaRecorder.start();
+            isRecording = true;
+        }
 
-    let tongPhi = phiGiaoDich + phiHoaHong + hoaHongLienKet + thue + phiCoDinh;
+        // Dừng ghi
+        function stopRecording() {
+            mediaRecorder.stop();
+            isRecording = false;
+        }
 
-    let tienQuyetToan = giaBan - tongPhi;
-    let loiNhuan = tienQuyetToan - giaNhap;
+        // Lưu video
+        function saveVideo() {
+            const blob = new Blob(recordedChunks, { type: 'video/webm' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.style.display = 'none';
+            a.href = url;
+            a.download = 'video_' + new Date().toISOString() + '.webm';
+            document.body.appendChild(a);
+            a.click();
+            setTimeout(() => {
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            }, 100);
+        }
 
-    kq.innerHTML = `
-    <b>Tổng phí:</b> ${tongPhi.toLocaleString()} đ<br>
-    <b>Tiền quyết toán:</b> ${tienQuyetToan.toLocaleString()} đ<br>
-    <hr>
-    <b>Giá nhập:</b> ${giaNhap.toLocaleString()} đ<br>
-    <b style="color:${loiNhuan>=0?'green':'red'}">
-        Lợi nhuận: ${loiNhuan.toLocaleString()} đ
-    </b>
-    `;
-}
-</script>
+        // Khởi động
+        startCamera();
+    </script>
 </body>
 </html>
