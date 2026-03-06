@@ -2,12 +2,12 @@
 <html lang="vi">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>QR Video Recorder</title>
     <style>
         body { margin: 0; padding: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; background-color: #000; }
-        #video { width: 100%; height: auto; }
-        #canvas { display: none; }
+        #canvas { width: 100%; height: auto; }
+        #video { display: none; } /* Ẩn video gốc, hiển thị canvas với overlay */
         #status { color: white; font-size: 18px; margin-top: 10px; }
     </style>
     <!-- Include jsQR library locally for offline use. Download from https://github.com/cozmo/jsQR and save as jsQR.js in the same folder -->
@@ -30,7 +30,6 @@
         let isRecording = false;
         let lastQRCode = null;
         let currentQRCode = null;
-        let beepAudio;
 
         // Tạo âm thanh beep
         function createBeep() {
@@ -63,12 +62,21 @@
             }
         }
 
-        // Quét QR từ video
+        // Quét QR từ video và vẽ lên canvas
         function scanQR() {
             if (video.readyState === video.HAVE_ENOUGH_DATA) {
                 canvas.height = video.videoHeight;
                 canvas.width = video.videoWidth;
                 ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+                if (isRecording) {
+                    const now = new Date();
+                    const dateTime = now.toLocaleString('vi-VN');
+                    ctx.font = '20px Arial';
+                    ctx.fillStyle = 'white';
+                    ctx.fillText(dateTime + ' - Mã: ' + (lastQRCode || ''), 10, canvas.height - 10);
+                }
+
                 const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
                 const code = jsQR(imageData.data, imageData.width, imageData.height);
 
@@ -87,25 +95,15 @@
                         status.textContent = 'Video đã lưu. Quét QR tiếp theo để bắt đầu.';
                     }
                 }
-
-                // Vẽ overlay nếu đang ghi
-                if (isRecording) {
-                    const now = new Date();
-                    const dateTime = now.toLocaleString('vi-VN');
-                    ctx.font = '20px Arial';
-                    ctx.fillStyle = 'white';
-                    ctx.fillText(dateTime + ' - Mã: ' + (lastQRCode || ''), 10, canvas.height - 10);
-                    // Để overlay lên video, nhưng vì video là stream, chúng ta cần composite nếu muốn ghi overlay vào video
-                    // Ở đây, overlay chỉ hiển thị trên canvas tạm thời, để ghi vào video cần xử lý trong MediaRecorder
-                }
             }
             requestAnimationFrame(scanQR);
         }
 
-        // Bắt đầu ghi video
+        // Bắt đầu ghi video từ canvas stream để bao gồm overlay
         function startRecording() {
             recordedChunks = [];
-            mediaRecorder = new MediaRecorder(stream);
+            const canvasStream = canvas.captureStream(30); // 30 FPS, bao gồm overlay
+            mediaRecorder = new MediaRecorder(canvasStream);
             mediaRecorder.ondataavailable = (event) => {
                 if (event.data.size > 0) {
                     recordedChunks.push(event.data);
