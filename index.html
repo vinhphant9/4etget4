@@ -2,20 +2,18 @@
 <html lang="vi">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>QR Video Recorder</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test QR Scanner</title>
     <style>
         body { margin: 0; padding: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; background-color: #000; }
-        #canvas { width: 100%; height: auto; }
-        #video { display: none; } /* Ẩn video gốc, hiển thị canvas với overlay */
+        #video { width: 100%; height: auto; }
         #status { color: white; font-size: 18px; margin-top: 10px; }
     </style>
-    <!-- Include jsQR library locally for offline use. Download from https://github.com/cozmo/jsQR and save as jsQR.js in the same folder -->
     <script src="jsQR.js"></script>
 </head>
 <body>
     <video id="video" autoplay playsinline></video>
-    <canvas id="canvas"></canvas>
+    <canvas id="canvas" style="display: none;"></canvas>
     <div id="status">Đang chờ quét QR...</div>
 
     <script>
@@ -24,14 +22,6 @@
         const ctx = canvas.getContext('2d');
         const status = document.getElementById('status');
 
-        let stream;
-        let mediaRecorder;
-        let recordedChunks = [];
-        let isRecording = false;
-        let lastQRCode = null;
-        let currentQRCode = null;
-
-        // Tạo âm thanh beep
         function createBeep() {
             const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
             const oscillator = audioCtx.createOscillator();
@@ -42,101 +32,35 @@
             oscillator.frequency.value = 1000;
             gainNode.gain.value = 0.5;
             oscillator.start();
-            setTimeout(() => {
-                oscillator.stop();
-            }, 200);
+            setTimeout(() => oscillator.stop(), 200);
         }
 
-        // Khởi động camera sau
         async function startCamera() {
             try {
-                stream = await navigator.mediaDevices.getUserMedia({
-                    video: { facingMode: 'environment' }, // Camera sau
-                    audio: true // Để ghi âm nếu cần, nhưng có thể bỏ nếu chỉ video
-                });
+                const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
                 video.srcObject = stream;
                 video.play();
                 requestAnimationFrame(scanQR);
             } catch (err) {
-                status.textContent = 'Lỗi truy cập camera: ' + err.message;
+                status.textContent = 'Lỗi: ' + err.message;
             }
         }
 
-        // Quét QR từ video và vẽ lên canvas
         function scanQR() {
             if (video.readyState === video.HAVE_ENOUGH_DATA) {
                 canvas.height = video.videoHeight;
                 canvas.width = video.videoWidth;
                 ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-                if (isRecording) {
-                    const now = new Date();
-                    const dateTime = now.toLocaleString('vi-VN');
-                    ctx.font = '20px Arial';
-                    ctx.fillStyle = 'white';
-                    ctx.fillText(dateTime + ' - Mã: ' + (lastQRCode || ''), 10, canvas.height - 10);
-                }
-
                 const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
                 const code = jsQR(imageData.data, imageData.width, imageData.height);
-
                 if (code) {
-                    currentQRCode = code.data;
-                    if (!isRecording && currentQRCode !== lastQRCode) {
-                        // Bắt đầu ghi
-                        createBeep();
-                        startRecording();
-                        lastQRCode = currentQRCode;
-                        status.textContent = 'Đang ghi video với mã: ' + currentQRCode;
-                    } else if (isRecording && currentQRCode !== lastQRCode) {
-                        // Dừng và lưu
-                        stopRecording();
-                        lastQRCode = currentQRCode;
-                        status.textContent = 'Video đã lưu. Quét QR tiếp theo để bắt đầu.';
-                    }
+                    createBeep();
+                    status.textContent = 'QR: ' + code.data;
                 }
             }
             requestAnimationFrame(scanQR);
         }
 
-        // Bắt đầu ghi video từ canvas stream để bao gồm overlay
-        function startRecording() {
-            recordedChunks = [];
-            const canvasStream = canvas.captureStream(30); // 30 FPS, bao gồm overlay
-            mediaRecorder = new MediaRecorder(canvasStream);
-            mediaRecorder.ondataavailable = (event) => {
-                if (event.data.size > 0) {
-                    recordedChunks.push(event.data);
-                }
-            };
-            mediaRecorder.onstop = saveVideo;
-            mediaRecorder.start();
-            isRecording = true;
-        }
-
-        // Dừng ghi
-        function stopRecording() {
-            mediaRecorder.stop();
-            isRecording = false;
-        }
-
-        // Lưu video
-        function saveVideo() {
-            const blob = new Blob(recordedChunks, { type: 'video/webm' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.style.display = 'none';
-            a.href = url;
-            a.download = 'video_' + new Date().toISOString() + '.webm';
-            document.body.appendChild(a);
-            a.click();
-            setTimeout(() => {
-                document.body.removeChild(a);
-                URL.revokeObjectURL(url);
-            }, 100);
-        }
-
-        // Khởi động
         startCamera();
     </script>
 </body>
