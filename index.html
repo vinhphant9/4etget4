@@ -74,13 +74,14 @@
         // Callback khi quét thành công
         function onScanSuccess(decodedText, decodedResult) {
             currentQRCode = decodedText;
-            if (!isRecording) {
+            if (!isRecording && currentQRCode !== lastQRCode) {
                 createBeep();
                 startRecording();
                 lastQRCode = currentQRCode;
                 status.textContent = 'Đang ghi video với mã: ' + currentQRCode;
                 updateOverlay();
-            } else if (currentQRCode !== lastQRCode) {
+            } else if (isRecording && currentQRCode !== lastQRCode) {
+                createBeep(); // Thêm beep khi quét QR để dừng recording
                 stopRecording();
                 lastQRCode = currentQRCode;
                 status.textContent = 'Video đã lưu. Quét QR tiếp theo để bắt đầu.';
