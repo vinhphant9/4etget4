@@ -30,10 +30,16 @@
         let currentQRCode = null;
         let videoElement; // Sẽ lấy từ html5-qrcode
         let stream;
+        let audioCtx; // Khởi tạo AudioContext toàn cục
 
-        // Tạo âm thanh beep
-        function createBeep() {
-            const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        // Khởi tạo AudioContext sớm
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+        // Tạo âm thanh beep với resume context
+        async function createBeep() {
+            if (audioCtx.state === 'suspended') {
+                await audioCtx.resume();
+            }
             const oscillator = audioCtx.createOscillator();
             const gainNode = audioCtx.createGain();
             oscillator.connect(gainNode);
@@ -146,6 +152,13 @@
 
         // Khởi động
         startScanner();
+
+        // Thêm listener để resume AudioContext trên mobile khi user tương tác
+        document.addEventListener('touchend', () => {
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+        }, { once: true });
     </script>
 </body>
 </html>
