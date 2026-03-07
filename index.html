@@ -1,164 +1,65 @@
 <!DOCTYPE html>
 <html lang="vi">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>QR Video Recorder</title>
-    <style>
-        body { margin: 0; padding: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; background-color: #000; }
-        #reader { width: 100%; height: auto; position: relative; }
-        #canvas { display: none; } /* Sử dụng cho recording nếu cần */
-        #status { color: white; font-size: 18px; margin-top: 10px; text-align: center; }
-        #video-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; color: white; font-size: 20px; display: flex; align-items: flex-end; padding: 10px; box-sizing: border-box; }
-    </style>
-    <!-- Thư viện html5-qrcode từ CDN -->
-    <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<meta charset="UTF-8">
+<title>Web đầu tiên</title>
+
+<style>
+body{
+    font-family: Arial;
+    background:#f2f2f2;
+    margin:0;
+}
+
+.header{
+    background:#2196F3;
+    color:white;
+    padding:20px;
+    text-align:center;
+}
+
+.menu{
+    background:#333;
+    padding:10px;
+}
+
+.menu a{
+    color:white;
+    margin:10px;
+    text-decoration:none;
+}
+
+.content{
+    padding:20px;
+}
+
+.box{
+    background:white;
+    padding:20px;
+    border-radius:10px;
+}
+</style>
+
 </head>
+
 <body>
-    <div id="reader"></div>
-    <div id="status">Đang chờ quét QR...</div>
 
-    <script>
-        const status = document.getElementById('status');
-        const reader = document.getElementById('reader');
+<div class="header">
+<h1>Website của tôi</h1>
+</div>
 
-        let html5QrCode;
-        let mediaRecorder;
-        let recordedChunks = [];
-        let isRecording = false;
-        let lastQRCode = null;
-        let currentQRCode = null;
-        let videoElement; // Sẽ lấy từ html5-qrcode
-        let stream;
-        let audioCtx; // Khởi tạo AudioContext toàn cục
+<div class="menu">
+<a href="#">Trang chủ</a>
+<a href="#">Sản phẩm</a>
+<a href="#">Liên hệ</a>
+</div>
 
-        // Khởi tạo AudioContext sớm
-        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+<div class="content">
+<div class="box">
+<h2>Xin chào</h2>
+<p>Đây là giao diện web đầu tiên của tôi.</p>
+</div>
+</div>
 
-        // Tạo âm thanh beep với resume context
-        async function createBeep() {
-            if (audioCtx.state === 'suspended') {
-                await audioCtx.resume();
-            }
-            const oscillator = audioCtx.createOscillator();
-            const gainNode = audioCtx.createGain();
-            oscillator.connect(gainNode);
-            gainNode.connect(audioCtx.destination);
-            oscillator.type = 'square';
-            oscillator.frequency.value = 1000;
-            gainNode.gain.value = 0.5;
-            oscillator.start();
-            setTimeout(() => {
-                oscillator.stop();
-            }, 200);
-        }
-
-        // Bắt đầu quét QR
-        async function startScanner() {
-            html5QrCode = new Html5Qrcode("reader");
-            const config = { fps: 10, qrbox: { width: 250, height: 250 } };
-
-            try {
-                await html5QrCode.start(
-                    { facingMode: "environment" },
-                    config,
-                    onScanSuccess,
-                    onScanFailure
-                );
-                // Lấy video element sau khi start
-                videoElement = reader.querySelector('video');
-                stream = videoElement.captureStream(); // Để recording từ video
-                // Thêm overlay div cho display (không ghi vào video)
-                const overlay = document.createElement('div');
-                overlay.id = 'video-overlay';
-                reader.appendChild(overlay);
-            } catch (err) {
-                status.textContent = 'Lỗi khởi động camera: ' + err.message;
-            }
-        }
-
-        // Callback khi quét thành công
-        function onScanSuccess(decodedText, decodedResult) {
-            currentQRCode = decodedText;
-            if (!isRecording && currentQRCode !== lastQRCode) {
-                createBeep();
-                startRecording();
-                lastQRCode = currentQRCode;
-                status.textContent = 'Đang ghi video với mã: ' + currentQRCode;
-                updateOverlay();
-            } else if (isRecording && currentQRCode !== lastQRCode) {
-                createBeep(); // Thêm beep khi quét QR để dừng recording
-                stopRecording();
-                lastQRCode = currentQRCode;
-                status.textContent = 'Video đã lưu. Quét QR tiếp theo để bắt đầu.';
-                updateOverlay();
-            }
-        }
-
-        // Callback khi quét thất bại (có thể ignore hoặc log)
-        function onScanFailure(error) {
-            // console.warn(`QR error = ${error}`);
-        }
-
-        // Cập nhật overlay (hiển thị trên video, nhưng không ghi vào video)
-        function updateOverlay() {
-            const overlay = document.getElementById('video-overlay');
-            if (isRecording) {
-                const now = new Date();
-                const dateTime = now.toLocaleString('vi-VN');
-                overlay.textContent = `${dateTime} - Mã: ${lastQRCode || ''}`;
-            } else {
-                overlay.textContent = '';
-            }
-            requestAnimationFrame(updateOverlay); // Cập nhật liên tục thời gian
-        }
-
-        // Bắt đầu ghi video (từ stream video gốc, chưa có overlay trong recorded video)
-        function startRecording() {
-            recordedChunks = [];
-            mediaRecorder = new MediaRecorder(stream);
-            mediaRecorder.ondataavailable = (event) => {
-                if (event.data.size > 0) {
-                    recordedChunks.push(event.data);
-                }
-            };
-            mediaRecorder.onstop = saveVideo;
-            mediaRecorder.start();
-            isRecording = true;
-        }
-
-        // Dừng ghi
-        function stopRecording() {
-            mediaRecorder.stop();
-            isRecording = false;
-        }
-
-        // Lưu video tự động tải về bộ nhớ điện thoại
-        function saveVideo() {
-            const blob = new Blob(recordedChunks, { type: 'video/webm' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.style.display = 'none';
-            a.href = url;
-            a.download = 'video_' + new Date().toISOString() + '.webm';
-            document.body.appendChild(a);
-            a.click(); // Tự động trigger download
-            setTimeout(() => {
-                document.body.removeChild(a);
-                URL.revokeObjectURL(url);
-                status.textContent = 'Video đã tải về bộ nhớ điện thoại. Quét QR tiếp theo để bắt đầu.';
-            }, 100);
-        }
-
-        // Khởi động
-        startScanner();
-
-        // Thêm listener để resume AudioContext trên mobile khi user tương tác
-        document.addEventListener('touchend', () => {
-            if (audioCtx.state === 'suspended') {
-                audioCtx.resume();
-            }
-        }, { once: true });
-    </script>
 </body>
 </html>
