@@ -8,18 +8,29 @@
 <style>
 
 body{
+margin:0;
+padding:0;
 background:#000;
 color:white;
 font-family:Arial;
 text-align:center;
-margin:0;
-padding:20px;
 }
 
 #reader{
 width:100%;
-max-width:400px;
+max-width:500px;
 margin:auto;
+}
+
+#status{
+margin:10px;
+font-size:18px;
+}
+
+#qr-list-container{
+width:100%;
+max-width:500px;
+margin:20px auto;
 }
 
 ul{
@@ -28,19 +39,20 @@ padding:0;
 }
 
 li{
-background:#333;
-margin:5px;
+margin:8px;
 padding:10px;
 border:1px solid #555;
+background:#333;
 }
 
-button{
-padding:12px 20px;
+#complete{
+padding:12px 25px;
 margin:10px;
 background:#4CAF50;
 color:white;
 border:none;
 cursor:pointer;
+font-size:16px;
 }
 
 </style>
@@ -56,113 +68,141 @@ cursor:pointer;
 
 <div id="reader"></div>
 
-<h3>Danh sách mã</h3>
+<div id="status">Đang chờ quét QR...</div>
+
+<div id="qr-list-container">
+
+<h3>Danh sách</h3>
 
 <ul id="qr-list"></ul>
 
 <button id="complete">Hoàn thành</button>
 
+</div>
+
 <script>
 
-let html5QrCode
+const status = document.getElementById('status');
+const qrList = document.getElementById('qr-list');
+const completeButton = document.getElementById('complete');
 
-let scannedCodes = []
-let scannedSet = new Set()
+let html5QrCode;
 
-const qrList = document.getElementById("qr-list")
+let scannedCodes = [];
+let scannedSet = new Set();
 
-function beep(){
+let audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
-const audioCtx = new (window.AudioContext || window.webkitAudioContext)()
+async function createBeep() {
 
-const oscillator = audioCtx.createOscillator()
-const gainNode = audioCtx.createGain()
+if (audioCtx.state === 'suspended') {
+await audioCtx.resume();
+}
 
-oscillator.connect(gainNode)
-gainNode.connect(audioCtx.destination)
+const oscillator = audioCtx.createOscillator();
+const gainNode = audioCtx.createGain();
 
-oscillator.frequency.value = 1000
+oscillator.connect(gainNode);
+gainNode.connect(audioCtx.destination);
 
-oscillator.start()
+oscillator.type = 'square';
+oscillator.frequency.value = 1000;
+gainNode.gain.value = 0.5;
 
-setTimeout(()=>{
-oscillator.stop()
-},200)
+oscillator.start();
+
+setTimeout(() => {
+oscillator.stop();
+}, 200);
+
+}
+
+async function startScanner(){
+
+html5QrCode = new Html5Qrcode("reader");
+
+const config = { fps: 10, qrbox: { width: 250, height: 250 } };
+
+await html5QrCode.start(
+{ facingMode: "environment" },
+config,
+onScanSuccess
+);
 
 }
 
 function onScanSuccess(decodedText){
 
-if(scannedSet.has(decodedText)) return
+if (scannedSet.has(decodedText)) return;
 
-scannedSet.add(decodedText)
+scannedSet.add(decodedText);
 
-beep()
+createBeep();
 
-const now = new Date()
+addToList(decodedText);
+
+}
+
+function addToList(code){
+
+const now = new Date();
+
+const stt = scannedCodes.length + 1;
 
 const item = {
+stt: stt,
+time: now.toLocaleString('vi-VN'),
+code: code
+};
 
-stt: scannedCodes.length + 1,
+scannedCodes.push(item);
 
-time: now.toLocaleString("vi-VN"),
+const li = document.createElement('li');
 
-code: decodedText
+li.textContent = `${item.stt} | ${item.time} | ${item.code}`;
 
-}
-
-scannedCodes.push(item)
-
-const li = document.createElement("li")
-
-li.textContent =
-item.stt+" | "+item.time+" | "+item.code
-
-qrList.appendChild(li)
+qrList.appendChild(li);
 
 }
 
-function startScanner(){
+completeButton.addEventListener('click', () => {
 
-html5QrCode = new Html5Qrcode("reader")
-
-html5QrCode.start(
-{ facingMode:"environment"},
-{ fps:10, qrbox:{width:250,height:250}},
-onScanSuccess
-)
-
+if (scannedCodes.length === 0) {
+alert('Chưa có mã nào!');
+return;
 }
 
-document.getElementById("complete").onclick = function(){
-
-if(scannedCodes.length==0){
-
-alert("Chưa có mã nào")
-
-return
-
+if (html5QrCode) {
+html5QrCode.stop().catch(err => console.error(err));
 }
 
-const ws = XLSX.utils.json_to_sheet(scannedCodes.map(item=>({
+const ws = XLSX.utils.json_to_sheet(scannedCodes.map(item => ({
 
-"Số thứ tự":item.stt,
+'Số thứ tự': item.stt,
+'Ngày giờ': item.time,
+'Mã đơn': item.code
 
-"Ngày giờ":item.time,
+})));
 
-"Mã đơn":item.code
+const wb = XLSX.utils.book_new();
 
-})))
+XLSX.utils.book_append_sheet(wb, ws, 'Danh sách');
 
-const wb = XLSX.utils.book_new()
+XLSX.writeFile(wb, 'danh_sach_ma_qr.xlsx');
 
-XLSX.utils.book_append_sheet(wb,ws,"Danh sách")
+alert('File đã tải xuống!');
 
-XLSX.writeFile(wb,"danh_sach_ma_qr.xlsx")
+});
 
+document.addEventListener('touchend', () => {
+
+if (audioCtx.state === 'suspended') {
+audioCtx.resume();
 }
 
-startScanner()
+}, { once: true });
+
+startScanner();
 
 </script>
 
