@@ -2,64 +2,169 @@
 <html lang="vi">
 <head>
 <meta charset="UTF-8">
-<title>Web đầu tiên</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Quét mã đơn</title>
 
 <style>
+
 body{
-    font-family: Arial;
-    background:#f2f2f2;
-    margin:0;
+background:#000;
+color:white;
+font-family:Arial;
+text-align:center;
+margin:0;
+padding:20px;
 }
 
-.header{
-    background:#2196F3;
-    color:white;
-    padding:20px;
-    text-align:center;
+#reader{
+width:100%;
+max-width:400px;
+margin:auto;
 }
 
-.menu{
-    background:#333;
-    padding:10px;
+ul{
+list-style:none;
+padding:0;
 }
 
-.menu a{
-    color:white;
-    margin:10px;
-    text-decoration:none;
+li{
+background:#333;
+margin:5px;
+padding:10px;
+border:1px solid #555;
 }
 
-.content{
-    padding:20px;
+button{
+padding:12px 20px;
+margin:10px;
+background:#4CAF50;
+color:white;
+border:none;
+cursor:pointer;
 }
 
-.box{
-    background:white;
-    padding:20px;
-    border-radius:10px;
-}
 </style>
+
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 
 </head>
 
 <body>
 
-<div class="header">
-<h1>Website của tôi</h1>
-</div>
+<h2>Quét mã đơn</h2>
 
-<div class="menu">
-<a href="#">Trang chủ</a>
-<a href="#">Sản phẩm</a>
-<a href="#">Liên hệ</a>
-</div>
+<div id="reader"></div>
 
-<div class="content">
-<div class="box">
-<h2>Xin chào</h2>
-<p>Đây là giao diện web đầu tiên của tôi.</p>
-</div>
-</div>
+<h3>Danh sách mã</h3>
+
+<ul id="qr-list"></ul>
+
+<button id="complete">Hoàn thành</button>
+
+<script>
+
+let html5QrCode
+
+let scannedCodes = []
+let scannedSet = new Set()
+
+const qrList = document.getElementById("qr-list")
+
+function beep(){
+
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)()
+
+const oscillator = audioCtx.createOscillator()
+const gainNode = audioCtx.createGain()
+
+oscillator.connect(gainNode)
+gainNode.connect(audioCtx.destination)
+
+oscillator.frequency.value = 1000
+
+oscillator.start()
+
+setTimeout(()=>{
+oscillator.stop()
+},200)
+
+}
+
+function onScanSuccess(decodedText){
+
+if(scannedSet.has(decodedText)) return
+
+scannedSet.add(decodedText)
+
+beep()
+
+const now = new Date()
+
+const item = {
+
+stt: scannedCodes.length + 1,
+
+time: now.toLocaleString("vi-VN"),
+
+code: decodedText
+
+}
+
+scannedCodes.push(item)
+
+const li = document.createElement("li")
+
+li.textContent =
+item.stt+" | "+item.time+" | "+item.code
+
+qrList.appendChild(li)
+
+}
+
+function startScanner(){
+
+html5QrCode = new Html5Qrcode("reader")
+
+html5QrCode.start(
+{ facingMode:"environment"},
+{ fps:10, qrbox:{width:250,height:250}},
+onScanSuccess
+)
+
+}
+
+document.getElementById("complete").onclick = function(){
+
+if(scannedCodes.length==0){
+
+alert("Chưa có mã nào")
+
+return
+
+}
+
+const ws = XLSX.utils.json_to_sheet(scannedCodes.map(item=>({
+
+"Số thứ tự":item.stt,
+
+"Ngày giờ":item.time,
+
+"Mã đơn":item.code
+
+})))
+
+const wb = XLSX.utils.book_new()
+
+XLSX.utils.book_append_sheet(wb,ws,"Danh sách")
+
+XLSX.writeFile(wb,"danh_sach_ma_qr.xlsx")
+
+}
+
+startScanner()
+
+</script>
 
 </body>
 </html>
